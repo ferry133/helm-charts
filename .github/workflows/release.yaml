@@ -2,8 +2,8 @@ name: Release Charts
 
 on:
   push:
-    branches:
-      - main
+    tags:
+      - "v*.*.*" # 當推送以 'v' 開頭的標記時觸發工作流程
 
 jobs:
   release:
