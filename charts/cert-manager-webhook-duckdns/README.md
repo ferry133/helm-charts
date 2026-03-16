@@ -17,7 +17,7 @@ $ helm install cert-manager-webhook-duckdns \
             ebrianne.github.io/cert-manager-webhook-duckdns
 ```
 
-## Introduction
+## Introduction info.
 
 This chart bootstraps a duckdns [cert-manager-webhook](https://cert-manager.io/docs/configuration/acme/dns01/webhook/) deployment on a [Kubernetes](http://kubernetes.io) cluster using the [Helm](https://helm.sh) package manager.
 
