@@ -1,5 +1,29 @@
 apiVersion: v1
 entries:
+  cert-manager-webhook-duckdns:
+  - apiVersion: v1
+    appVersion: v1.2.3
+    created: "2026-03-16T15:07:58.732191966Z"
+    description: A Helm chart for cert manager webhook solver for ACME DNS01 challenge
+      via DuckDNS
+    digest: c8c19f967e56aaf6054034b3c90a6a0ba02800d1f822413e4a6d852c73b92234
+    home: https://github.com/ebrianne/cert-manager-webhook-duckdns
+    icon: https://raw.githubusercontent.com/jetstack/cert-manager/master/logo/logo.png
+    keywords:
+    - cert-manager
+    - webhook
+    - letsencrypt
+    - tls
+    maintainers:
+    - email: eldwan35@gmail.com
+      name: Eldwan Brianne
+      url: https://ebrianne.technolab.duckdns.org
+    name: cert-manager-webhook-duckdns
+    sources:
+    - https://github.com/ebrianne/cert-manager-webhook-duckdns
+    urls:
+    - https://github.com/ferry133/helm-charts/releases/download/cert-manager-webhook-duckdns-v1.2.3/cert-manager-webhook-duckdns-v1.2.3.tgz
+    version: v1.2.3
   omni:
   - apiVersion: v2
     appVersion: v1.5.3
@@ -24,4 +48,4 @@ entries:
     urls:
     - omni-2.1.1.tgz
     version: 2.1.1
-generated: "2026-02-19T16:42:48.871771349Z"
+generated: "2026-03-16T15:07:58.732198048Z"
