@@ -1,6 +1,6 @@
 # Omni Helm Chart (v2)
 
-![Version: 2.1.1](https://img.shields.io/badge/Version-2.1.1-informational?style=flat) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat) ![AppVersion: v1.5.3](https://img.shields.io/badge/AppVersion-v1.5.3-informational?style=flat)
+![Version: 2.8.1](https://img.shields.io/badge/Version-2.8.1-informational?style=flat) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat) ![AppVersion: v1.8.1](https://img.shields.io/badge/AppVersion-v1.8.1-informational?style=flat)
 
 A Helm chart to deploy [Omni](https://omni.siderolabs.com) on a Kubernetes cluster.
 
@@ -20,8 +20,6 @@ For all available configuration options, see the [`values.yaml`](values.yaml) fi
 
 ## Installation
 
-This chart is not yet published to a Helm repository. To install it, clone the repository and install from the local path.
-
 ### 1. Generate an etcd Encryption Key
 
 Omni requires a GPG private key to encrypt its database. If you don't have one, generate one with:
@@ -39,14 +37,17 @@ Create a `values.yaml` file with your configuration. See the example below.
 
 ### 3. Install the Chart
 
+The chart version corresponds to the Omni release version, but with a major version of `2` instead of `1`.
+For example, Omni `v1.7.2` maps to chart version `2.7.2`.
+
 ```bash
-helm install omni ./deploy/helm/omni -n omni --create-namespace -f values.yaml
+helm install omni oci://ghcr.io/siderolabs/charts/omni --version 2.7.2 -n omni --create-namespace -f values.yaml
 ```
 
 To upgrade an existing installation:
 
 ```bash
-helm upgrade omni ./deploy/helm/omni -n omni -f values.yaml
+helm upgrade omni oci://ghcr.io/siderolabs/charts/omni --version 2.7.2 -n omni -f values.yaml
 ```
 
 ## Authentication
@@ -142,24 +143,29 @@ For details on exposing services, see [Expose an HTTP Service from a Cluster](ht
 
 ### Domain Structure
 
-The workload proxy domain is **not** a subdomain of Omni—it exists alongside it. For example:
+The workload proxy domain is a **subdomain of Omni**. For example:
 
 - Omni: `omni.example.com`
-- Workload Proxy: `*.omni-workload.example.com`
+- Workload Proxy (with subdomain `proxy`): `*.proxy.omni.example.com`
+- Workload Proxy (with empty subdomain): `*.omni.example.com`
 
 Exposed services have URLs in the format:
 
 ```
-https://<prefix>-<account-name>.<subdomain>.<parent-domain>/
+https://<prefix>.[<subdomain>.]<omni-domain>/
 ```
 
-For example: `https://grafana-app.omni-workload.example.com/`
+For example:
+- With `subdomain: proxy`: `https://grafana.proxy.omni.example.com/`
+- With empty subdomain: `https://grafana.omni.example.com/`
 
 Where:
-- `<prefix>` is randomly generated, or user-specified via a Service annotation
-- `<account-name>` is the value of `config.account.name`
-- `<subdomain>` is the value of `config.services.workloadProxy.subdomain` (default: `omni-workload`)
-- `<parent-domain>` is the parent domain of your Omni installation
+- `<prefix>` is randomly generated, or user-specified via a Service annotation (dashes are allowed, e.g., `my-grafana`)
+- `<subdomain>` is the value of `config.services.workloadProxy.subdomain` (can be empty for the simplest setup)
+- `<omni-domain>` is the full domain of your Omni installation
+
+> [!NOTE]
+> Without `useOmniSubdomain: true`, the proxy domain is placed as a sibling of Omni (e.g., `*.omni-workload.example.com`) with a different URL format. This is not recommended for new installations.
 
 ### Requirements
 
@@ -171,14 +177,15 @@ To set up workload proxy, you need:
      services:
        workloadProxy:
          enabled: true
-         subdomain: omni-workload  # default
+         subdomain: proxy
+         useOmniSubdomain: true
    ```
 
-2. **Wildcard TLS certificate** for `*.<subdomain>.<parent-domain>` (e.g., `*.omni-workload.example.com`). You can use cert-manager to create one.
+2. **Wildcard TLS certificate** for `*.<subdomain>.<omni-domain>` (e.g., `*.proxy.omni.example.com`). You can use cert-manager to create one.
 
-3. **Wildcard DNS record** pointing `*.<subdomain>.<parent-domain>` to your ingress controller IP address.
+3. **Wildcard DNS record** pointing `*.<subdomain>.<omni-domain>` to your ingress controller IP address.
 
-4. **Ingress/routing rule** to route traffic matching `*-<account-name>.<subdomain>.<parent-domain>` to the Omni service. Standard Kubernetes Ingress does not support wildcard hostnames well, so you may need to use ingress controller-specific resources.
+4. **Ingress/routing rule** to route traffic matching `*.<subdomain>.<omni-domain>` to the Omni service. Standard Kubernetes Ingress does not support wildcard hostnames well, so you may need to use ingress controller-specific resources.
 
 ### Traefik Example
 
@@ -186,12 +193,11 @@ With Traefik, you can use an `IngressRoute` custom resource via `extraObjects`:
 
 ```yaml
 config:
-  account:
-    name: app  # This will be part of the workload proxy URL
   services:
     workloadProxy:
       enabled: true
-      subdomain: omni-workload
+      subdomain: proxy
+      useOmniSubdomain: true
 
 extraObjects:
   # Wildcard certificate for workload proxy (using cert-manager)
@@ -205,7 +211,7 @@ extraObjects:
         name: your-cluster-issuer
         kind: ClusterIssuer
       dnsNames:
-        - "*.omni-workload.example.com"
+        - "*.proxy.omni.example.com"
 
   # Traefik IngressRoute for wildcard routing
   - apiVersion: traefik.io/v1alpha1
@@ -217,8 +223,8 @@ extraObjects:
         - websecure
       routes:
         - kind: Rule
-          # Match any subdomain of omni-workload.example.com
-          match: HostRegexp(`.+\.omni-workload\.example\.com`)
+          # Match any subdomain of proxy.omni.example.com
+          match: HostRegexp(`.+\.proxy\.omni\.example\.com`)
           services:
             - kind: Service
               name: omni
@@ -246,37 +252,22 @@ Here are the configurable parameters of the Omni chart and their default values.
 | config.account.name | string | `"app"` | Name is the human-readable name of the account. |
 | config.auth.auth0.clientID | string | `""` | ClientID is the Auth0 client ID. |
 | config.auth.auth0.domain | string | `""` | Domain is the Auth0 domain. |
-| config.auth.auth0.enabled | bool | `true` | Enabled controls whether the Auth0 authentication provider is enabled. |
-| config.auth.initialServiceAccount | string | `nil` | InitialServiceAccount contains configuration for the initial service account created when Omni is run for the first time. |
+| config.auth.auth0.enabled | bool | `true` | Enabled controls whether the Auth0 authentication provider is enabled. Once set to true, it cannot be set back to false. |
 | config.auth.initialUsers | list | `[]` | InitialUsers is a list of emails which should be created as admins when Omni is run for the first time. |
-| config.auth.keyPruner | string | `nil` | KeyPruner contains configuration for the public keys pruner. |
-| config.auth.oidc | string | `nil` | OIDC contains OIDC authentication provider configuration. |
-| config.auth.saml | string | `nil` | SAML contains SAML authentication provider configuration. |
-| config.debug.pprof | string | `nil` | Pprof contains pprof profiling configuration. |
-| config.debug.server | string | `nil` | Server contains debug server configuration. |
 | config.etcdBackup.localPath | string | `"/data/etcd-backup"` | LocalPath is the local path where etcd backups are stored. Path-based backups are enabled when this is set. This path is mounted from the persistent volume by default. |
-| config.etcdBackup.s3Enabled | bool | `false` | S3Enabled controls whether an S3-compatible storage is used for etcd backups. Mutually exclusive with localPath. |
-| config.features | string | `nil` | Features contains feature flags to enable/disable various Omni features. |
-| config.logs.audit | string | `nil` | Audit contains audit logs configuration. |
-| config.logs.machine.storage | string | `nil` | Storage contains configuration for machine logs storage. |
-| config.logs.resourceLogger | string | `nil` | ResourceLogger contains resource logger configuration. |
-| config.registries | string | `nil` | Registries contains container image registries configuration. |
+| config.etcdBackup.s3Enabled | bool | `false` | S3Enabled controls whether an S3-compatible storage is used for etcd backups. Mutually exclusive with localPath (.localPath). |
 | config.services.api.advertisedURL | string | `"https://omni.example.com"` | The advertised URL for the main Omni GRPC and HTTP API and Web UI. MUST be specified as a full URL, including scheme (http:// or https://). It MUST match the URL of the main ingress if ingress is used. |
-| config.services.embeddedDiscoveryService | string | `nil` | EmbeddedDiscoveryService contains embedded discovery service configuration. |
 | config.services.kubernetesProxy.advertisedURL | string | `"https://kubernetes.omni.example.com"` | The advertised URL for the Kubernetes API Proxy. MUST be specified as a full URL, including scheme (https://). It MUST match the URL of the kubernetes proxy ingress if ingress is used. |
-| config.services.loadBalancer | string | `nil` | LoadBalancer contains load balancer service configuration. |
-| config.services.localResourceService | string | `nil` | LocalResourceService contains local resource service configuration. |
 | config.services.machineAPI.advertisedURL | string | `"https://siderolink.omni.example.com"` | The advertised URL for the SideroLink (Machine) API. MUST be specified as a full URL, including scheme (http:// or https://). It MUST match the URL of the siderolink API ingress if ingress is used. |
 | config.services.siderolink.eventSinkPort | int | `8091` | EventSinkPort is the port to be used by the nodes to publish their events over SideroLink to Omni. |
-| config.services.siderolink.joinTokensMode | string | `"strict"` | JoinTokensMode configures how machine join tokens are generated and used. |
-| config.services.siderolink.wireGuard | string | `nil` |  |
+| config.services.siderolink.joinTokensMode | string | `"strict"` | JoinTokensMode configures how machine join tokens are generated and used. Set to strict to use the secure join tokens mode. |
 | config.services.workloadProxy.enabled | bool | `false` | Enabled controls whether the workload proxy service is enabled. In on-prem setups, it is often disabled. |
-| config.services.workloadProxy.subdomain | string | `"omni-workload"` | Subdomain is the subdomain used by the workload proxy service to expose workloads. |
+| config.services.workloadProxy.subdomain | string | `"omni-workload"` | Subdomain is the subdomain used by the workload proxy service to expose workloads. By default, it lives at the same level as Omni (e.g., "omni-apps.example.com" for Omni at "omni.example.com"). When useOmniSubdomain is true, it is placed under Omni's domain instead (e.g., "proxy.omni.example.com"). When useOmniSubdomain is true and subdomain is empty, services are exposed directly as subdomains of Omni (e.g., "grafana.omni.example.com"). |
 | config.storage.default.boltdb.path | string | `"/data/omni-boltdb.db"` | Path to the primary BoltDB database. Is **NOT USED by default**: only used if the storage.default.kind is set to "boltdb". This path is mounted from the persistent volume by default. |
 | config.storage.default.etcd.embedded | bool | `true` | Embedded controls whether to use embedded etcd server as the storage backend. |
 | config.storage.default.etcd.embeddedDBPath | string | `"/data/etcd/"` | EmbeddedDBPath is the path where the embedded etcd database files are stored. This path is mounted from the persistent volume by default. |
-| config.storage.default.etcd.privateKeySource | string | `"file:///omni.asc"` | PrivateKeySource is the source of the private key for decrypting master key slot. |
-| config.storage.default.kind | string | `"etcd"` | Kind is the kind of the default storage backend (etcd or boltdb). |
+| config.storage.default.etcd.privateKeySource | string | `"file:///omni.asc"` | PrivateKeySource is the source of the private key for the embedded etcd server. It is used for decrypting master key slot. |
+| config.storage.default.kind | string | `"etcd"` | Kind is the kind of the default storage backend. |
 | config.storage.sqlite.path | string | `"/data/secondary-storage/sqlite.db"` | Path to the SQLite database (secondary storage). This path is mounted from the persistent volume by default. |
 | config.storage.vault.token | string | `""` | Token is the authentication token for the Vault server. Tip: Use additionalConfigSources to load this from an existing Secret, or set the VAULT_TOKEN environment variable via env/envFrom. |
 | config.storage.vault.url | string | `""` | Url is the URL of the Vault server. |
